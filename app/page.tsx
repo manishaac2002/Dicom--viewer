@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 
-const DicomViewer = dynamic(() => import('./components/DicomViewer'), {
+const DicomViewer = dynamic(() => import('./components/DicomViwer'), {
   ssr: false,
 });
 
