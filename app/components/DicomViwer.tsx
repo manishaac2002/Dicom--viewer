@@ -1,112 +1,94 @@
-'use client';
+"use client";
 
-import React, { useEffect, useRef, useState } from 'react';
-import * as cornerstone from 'cornerstone-core';
-import * as cornerstoneWADOImageLoader from 'cornerstone-wado-image-loader';
-import * as dicomParser from 'dicom-parser';
+import React, { useState } from "react";
+import DicomFileInput from "./DicomFileInput";
+import DicomMetadata from "./DicomMetadata";
 
-cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
-cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
+// Tags of interest (uppercase format)
+const HIGHLIGHTED_TAGS: { [tag: string]: string } = {
+  "0010,0010": "Patient Name",
+  "0010,0020": "Patient ID",
+  "0008,0080": "Hospital Name",
+  "0008,0020": "Study Date",
+  "0008,0030": "Study Time",
+  "0008,0060": "Modality",
+  "0018,5010": "Probe Type",
+};
 
 export default function DicomViewer() {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const elementRef = useRef<HTMLDivElement | null>(null);
-  const [metaDataList, setMetaDataList] = useState<{ tag: string; value: string }[]>([]);
-
-  useEffect(() => {
-    if (elementRef.current) {
-      cornerstone.enable(elementRef.current);
+  const normalizeTag = (rawTag: string): string => {
+    // Convert "X00080080" to "0008,0080"
+    if (rawTag.startsWith("X") && rawTag.length === 9) {
+      return `${rawTag.slice(1, 5)},${rawTag.slice(5)}`;
     }
-  }, []);
+    return rawTag;
+  };
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const [highlightedData, setHighlightedData] = useState<
+    { label: string; value: string }[]
+  >([]);
+  const [otherMetaData, setOtherMetaData] = useState<
+    { label: string; value: string }[]
+  >([]);
 
-    const imageId = cornerstoneWADOImageLoader.wadouri.fileManager.add(file);
+  const handleMetadata = (metaDataList: { tag: string; value: string }[]) => {
+    const highlights: { label: string; value: string }[] = [];
+    const others: { label: string; value: string }[] = [];
+    
+    let fieldCounter = 1;
 
-    try {
-      const image = await cornerstone.loadAndCacheImage(imageId);
-      if (elementRef.current) {
-        cornerstone.displayImage(elementRef.current, image);
+    for (const item of metaDataList) {
+      const normalizedTag = normalizeTag(item.tag.toUpperCase());
+      const label = HIGHLIGHTED_TAGS[normalizedTag];
+
+      if (label) {
+        highlights.push({ label, value: item.value });
+      } else {
+
+        others.push({
+          label: `Field ${fieldCounter++}`,
+          value: item.value,
+        });
       }
-
-      // Manually read file to extract metadata
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        try {
-          const arrayBuffer = e.target?.result;
-          if (!arrayBuffer || typeof arrayBuffer === 'string') {
-            console.error('Invalid arrayBuffer');
-            return;
-          }
-
-          const byteArray = new Uint8Array(arrayBuffer);
-          const dataSet = dicomParser.parseDicom(byteArray);
-
-          const elements = dataSet.elements;
-          const metaList: { tag: string; value: string }[] = [];
-
-          for (const tag in elements) {
-            try {
-              const value = dataSet.string(tag);
-              if (value) {
-                metaList.push({
-                  tag: tag.toUpperCase(),
-                  value,
-                });
-              }
-            } catch (err) {
-              // skip non-string values
-            }
-          }
-
-          if (metaList.length === 0) {
-            console.warn('No readable metadata found.');
-          }
-
-          setMetaDataList(metaList);
-        } catch (err) {
-          console.error('Failed to parse DICOM metadata', err);
-        }
-      };
-
-      reader.readAsArrayBuffer(file);
-    } catch (err) {
-      console.error('Failed to load image', err);
     }
+
+    setHighlightedData(highlights);
+    setOtherMetaData(others);
   };
 
   return (
     <div className="p-4">
-      <input
-        type="file"
-        accept=".dcm"
-        ref={fileInputRef}
-        onChange={handleFileChange}
-      />
-      <div
-        ref={elementRef}
-        style={{
-          width: '512px',
-          height: '512px',
-          backgroundColor: 'black',
-          marginTop: '20px',
-        }}
-      />
-      <div className="mt-4 text-gray-800">
-        <h2 className="text-lg font-semibold">All DICOM Metadata</h2>
-        {metaDataList.length === 0 ? (
-          <p>No metadata available</p>
-        ) : (
-          <ul className="text-sm max-h-80 overflow-auto border p-2 rounded bg-white shadow">
-            {metaDataList.map((item, index) => (
-              <li key={index}>
-                <strong>{item.tag}</strong>: {item.value}
-              </li>
-            ))}
-          </ul>
-        )}
+      <h1 className="text-amber-700 font-bold text-2xl pb-4">DICOM VIEWER</h1>
+
+      <div className="mb-4">
+        <DicomFileInput onMetadataExtracted={handleMetadata} />
+      </div>
+
+      <div className="flex flex-row gap-6">
+        {/* DICOM image */}
+        <div className="w-[1500px] h-[800px] bg-black">
+          <div id="dicom-image" className="w-full h-full" />
+        </div>
+
+        {/* Metadata */}
+        <div className="flex-1 overflow-auto max-h-[800px] space-y-4">
+          <div className="bg-white p-4 rounded shadow">
+            <h2 className="text-lg font-semibold mb-2">Patient Information</h2>
+            {highlightedData.length === 0 ? (
+              <p>No key metadata found</p>
+            ) : (
+              <ul className="text-sm">
+                {highlightedData.map((item, index) => (
+                  <li key={index}>
+                    <strong>{item.label}:</strong> {item.value}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <DicomMetadata metaDataList={otherMetaData} />
+        </div>
       </div>
     </div>
   );
