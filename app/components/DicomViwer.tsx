@@ -31,30 +31,36 @@ export default function DicomViewer() {
     { label: string; value: string }[]
   >([]);
 
-  const handleMetadata = (metaDataList: { tag: string; value: string }[]) => {
-    const highlights: { label: string; value: string }[] = [];
-    const others: { label: string; value: string }[] = [];
-    
-    let fieldCounter = 1;
+const handleMetadata = (metaDataList: { tag: string; value: string }[]) => {
+  const highlights: { label: string; value: string }[] = [];
+  const others: { label: string; value: string }[] = [];
 
-    for (const item of metaDataList) {
-      const normalizedTag = normalizeTag(item.tag.toUpperCase());
-      const label = HIGHLIGHTED_TAGS[normalizedTag];
+  let fieldCounter = 1;
 
-      if (label) {
-        highlights.push({ label, value: item.value });
-      } else {
+  for (const item of metaDataList) {
+    const normalizedTag = normalizeTag(item.tag.toUpperCase());
+    const label = HIGHLIGHTED_TAGS[normalizedTag];
 
-        others.push({
-          label: `Field ${fieldCounter++}`,
-          value: item.value,
-        });
-      }
+    //  Clean non-printable characters
+    const cleanedValue = item.value.replace(/[^\x20-\x7E]/g, '').trim();
+
+    // Skip empty values
+    if (!cleanedValue) continue;
+
+    if (label) {
+      highlights.push({ label, value: cleanedValue });
+    } else {
+      others.push({
+        label: `Field ${fieldCounter++}`,
+        value: cleanedValue,
+      });
     }
+  }
 
-    setHighlightedData(highlights);
-    setOtherMetaData(others);
-  };
+  setHighlightedData(highlights);
+  setOtherMetaData(others);
+};
+
 
   return (
     <div className="p-4">
